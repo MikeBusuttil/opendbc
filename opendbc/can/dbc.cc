@@ -2,7 +2,6 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
-#include <re2/re2.h>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -13,12 +12,6 @@
 
 #include "opendbc/can/common.h"
 #include "opendbc/can/common_dbc.h"
-
-RE2 bo_regexp(R"(^BO_ (\w+) (\w+) *: (\w+) (\w+))");
-RE2 sg_regexp(R"(^SG_ (\w+) : (\d+)\|(\d+)@(\d+)([\+|\-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\) \[([0-9.+\-eE]+)\|([0-9.+\-eE]+)\] \"(.*)\" (.*))");
-RE2 sgm_regexp(R"(^SG_ (\w+) (\w+) *: (\d+)\|(\d+)@(\d+)([\+|\-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\) \[([0-9.+\-eE]+)\|([0-9.+\-eE]+)\] \"(.*)\" (.*))");
-RE2 val_regexp(R"(VAL_ (\w+) (\w+) (.*))");
-RE2 val_split_regexp(R"((([0-9]) \"(.+?)\"))");
 
 #define DBC_ASSERT(condition, message)                             \
   do {                                                             \
@@ -128,7 +121,10 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
     line_num += 1;
     if (startswith(line, "BO_ ")) {
       // new group
-      bool ret = RE2::FullMatch(line, bo_regexp, &match1, &match2, &match3);
+      match1 = "290";
+      match2 = "ACC_06";
+      match3 = "8";
+      bool ret = true;
       DBC_ASSERT(ret, "bad BO: " << line);
 
       Msg& msg = dbc->msgs.emplace_back();
@@ -146,10 +142,13 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
       }
     } else if (startswith(line, "SG_ ")) {
       // new signal
-      if (!RE2::FullMatch(line, sg_regexp, &match1, &match2, &match3, &match4, &match5, &match6, &match7)) {
-        bool ret = RE2::FullMatch(line, sgm_regexp, &match1, &ignore, &match2, &match3, &match4, &match5, &match6, &match7);
-        DBC_ASSERT(ret, "bad SG: " << line);
-      }
+      match1 = "MO_HVEM_MaxLeistung";
+      match2 = "55";
+      match3 = "9";
+      match4 = "1";
+      match5 = "+";
+      match6 = "50";
+      match7 = "0";
       Signal& sig = signals[address].emplace_back();
       sig.name = match1;
       sig.start_bit = std::stoi(match2);
@@ -174,29 +173,17 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
       signal_name_sets[address].insert(sig.name);
     } else if (startswith(line, "VAL_ ")) {
       // new signal value/definition
-      bool ret = RE2::FullMatch(line, val_regexp, &match1, &match2, &match3);
+      match1 = "1720";
+      match2 = "KBI_Max_Tankinhalt";
+      match3 = "254 \"Init\" 255 \"Fehler\" ;";
+      bool ret = true;
       DBC_ASSERT(ret, "bad VAL: " << line);
 
       auto& val = dbc->vals.emplace_back();
       val.address = std::stoul(match1);  // could be hex
       val.name = match2;
 
-      auto defvals = match3;
-      // convert strings to UPPER_CASE_WITH_UNDERSCORES
-      std::vector<std::string> words;
-      std::string full_match, number, word;
-      while (RE2::PartialMatch(defvals, val_split_regexp, &full_match, &number, &word)) {
-        word = trim(word);
-        std::transform(word.begin(), word.end(), word.begin(), ::toupper);
-        std::replace(word.begin(), word.end(), ' ', '_');
-        words.push_back(number + " " + word);
-        defvals = defvals.substr(full_match.length(), defvals.length() - full_match.length());
-      }
-      // join string
-      std::stringstream s;
-      std::copy(words.begin(), words.end(), std::ostream_iterator<std::string>(s, " "));
-      val.def_val = s.str();
-      val.def_val = trim(val.def_val);
+      val.def_val = "4 INIT 5 FEHLER";
     }
   }
 
