@@ -10,17 +10,7 @@ fi
 
 uv sync --all-extras
 source .venv/bin/activate
-
-mkdir -p .tmp
-echo '
-#include <re2/re2.h>
-RE2 x("");int main(void) {return 0;}
-' > .tmp/re2.c
-g++ -o .tmp/re2.o .tmp/re2.c -lre2 &>/dev/null || {
-  echo "'re2' is not installed. Installing 're2'..."
-  [[ $OSTYPE = "linux-gnu" ]] && sudo apt-get install -y --no-install-recommends libre2-dev || brew install re2
-}
-rm -rf .tmp
+[ ! -f opendbc/can/ctre.hpp ] && wget -O opendbc/can/ctre.hpp https://github.com/hanickadot/compile-time-regular-expressions/raw/refs/heads/main/single-header/ctre.hpp
 
 # *** build ***
 uv run scons -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
