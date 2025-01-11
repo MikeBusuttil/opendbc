@@ -124,8 +124,7 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
 
   std::string line;
   int line_num = 0;
-  std::string match1, match2, match3, match4, match5, match6, match7, ignore;
-  // TODO: see if we can speed up the regex statements in this loop, SG_ is specifically the slowest
+  std::string match1, match2, match3, match4, match5, match6, match7;
   while (std::getline(stream, line)) {
     line = trim(line);
     line_num += 1;
