@@ -3,6 +3,7 @@
 #include <fstream>
 #include <map>
 #include <re2/re2.h>
+#include <ctre.hpp>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -10,14 +11,16 @@
 #include <iterator>
 #include <cstring>
 #include <clocale>
-
+#include <iostream>
 #include "opendbc/can/common.h"
 #include "opendbc/can/common_dbc.h"
 
-RE2 bo_regexp(R"(^BO_ (\w+) (\w+) *: (\w+) (\w+))");
-RE2 sg_regexp(R"(^SG_ (\w+) : (\d+)\|(\d+)@(\d+)([\+|\-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\) \[([0-9.+\-eE]+)\|([0-9.+\-eE]+)\] \"(.*)\" (.*))");
-RE2 sgm_regexp(R"(^SG_ (\w+) (\w+) *: (\d+)\|(\d+)@(\d+)([\+|\-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\) \[([0-9.+\-eE]+)\|([0-9.+\-eE]+)\] \"(.*)\" (.*))");
-RE2 val_regexp(R"(VAL_ (\w+) (\w+) (.*))");
+constexpr auto bo_pattern = ctll::fixed_string{R"(^BO_ (\w+) (\w+) *: (\w+) \w+)"};
+constexpr auto sg_pattern = ctll::fixed_string{R"(^SG_ (\w+) .*: (\d+)\|(\d+)@(\d+)([\+|\-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\) \[[0-9.+\-eE]+\|[0-9.+\-eE]+\] \".*\" .*)"};
+constexpr auto val_pattern = ctll::fixed_string{R"(VAL_ (\w+) (\w+) (.*))"};
+constexpr auto bo_match = ctre::match<bo_pattern>;
+constexpr auto sg_match = ctre::match<sg_pattern>;
+constexpr auto val_match = ctre::match<val_pattern>;
 RE2 val_split_regexp(R"((([0-9]) \"(.+?)\"))");
 
 #define DBC_ASSERT(condition, message)                             \
@@ -128,13 +131,13 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
     line_num += 1;
     if (startswith(line, "BO_ ")) {
       // new group
-      bool ret = RE2::FullMatch(line, bo_regexp, &match1, &match2, &match3);
+      auto [ret, match01, match02, match03] = bo_match(line);
       DBC_ASSERT(ret, "bad BO: " << line);
 
       Msg& msg = dbc->msgs.emplace_back();
-      address = msg.address = std::stoul(match1);  // could be hex
-      msg.name = match2;
-      msg.size = std::stoul(match3);
+      address = msg.address = std::stoul(match01.str());  // could be hex
+      msg.name = match02.str();
+      msg.size = std::stoul(match03.str());
 
       // check for duplicates
       DBC_ASSERT(address_set.find(address) == address_set.end(), "Duplicate message address: " << address << " (" << msg.name << ")");
@@ -146,18 +149,16 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
       }
     } else if (startswith(line, "SG_ ")) {
       // new signal
-      if (!RE2::FullMatch(line, sg_regexp, &match1, &match2, &match3, &match4, &match5, &match6, &match7)) {
-        bool ret = RE2::FullMatch(line, sgm_regexp, &match1, &ignore, &match2, &match3, &match4, &match5, &match6, &match7);
-        DBC_ASSERT(ret, "bad SG: " << line);
-      }
+      auto [ret, match01, match02, match03, match04, match05, match06, match07] = sg_match(line);
+      DBC_ASSERT(ret, "bad SG: " << line);
       Signal& sig = signals[address].emplace_back();
-      sig.name = match1;
-      sig.start_bit = std::stoi(match2);
-      sig.size = std::stoi(match3);
-      sig.is_little_endian = std::stoi(match4) == 1;
-      sig.is_signed = match5 == "-";
-      sig.factor = std::stod(match6);
-      sig.offset = std::stod(match7);
+      sig.name = match01.str();
+      sig.start_bit = std::stoi(match02.str());
+      sig.size = std::stoi(match03.str());
+      sig.is_little_endian = std::stoi(match04.str()) == 1;
+      sig.is_signed = match05.str() == "-";
+      sig.factor = std::stod(match06.str());
+      sig.offset = std::stod(match07.str());
       set_signal_type(sig, checksum, dbc_name, line_num);
       if (sig.is_little_endian) {
         sig.lsb = sig.start_bit;
@@ -174,14 +175,14 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
       signal_name_sets[address].insert(sig.name);
     } else if (startswith(line, "VAL_ ")) {
       // new signal value/definition
-      bool ret = RE2::FullMatch(line, val_regexp, &match1, &match2, &match3);
+      auto [ret, match01, match02, match03] = val_match(line);
       DBC_ASSERT(ret, "bad VAL: " << line);
 
       auto& val = dbc->vals.emplace_back();
-      val.address = std::stoul(match1);  // could be hex
-      val.name = match2;
+      val.address = std::stoul(match01.str());  // could be hex
+      val.name = match02.str();
 
-      auto defvals = match3;
+      auto defvals = match03.str();
       // convert strings to UPPER_CASE_WITH_UNDERSCORES
       std::vector<std::string> words;
       std::string full_match, number, word;

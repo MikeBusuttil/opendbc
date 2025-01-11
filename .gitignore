@@ -12,6 +12,7 @@
 *.egg-info/
 *.html
 uv.lock
+ctre.hpp
 
 opendbc/can/*.so
 opendbc/can/*.a
@@ -21,5 +22,4 @@ opendbc/can/packer_pyx.cpp
 opendbc/can/parser_pyx.cpp
 opendbc/can/packer_pyx.html
 opendbc/can/parser_pyx.html
-opendbc/can/ctre.hpp
 opendbc/dbc/*_generated.dbc

@@ -10,7 +10,7 @@ fi
 
 uv sync --all-extras
 source .venv/bin/activate
-[ ! -f opendbc/can/ctre.hpp ] && wget -O opendbc/can/ctre.hpp https://github.com/hanickadot/compile-time-regular-expressions/raw/refs/heads/main/single-header/ctre.hpp
+[ ! -f ctre.hpp ] && wget https://github.com/hanickadot/compile-time-regular-expressions/raw/refs/heads/main/single-header/ctre.hpp
 
 # *** build ***
 uv run scons -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
