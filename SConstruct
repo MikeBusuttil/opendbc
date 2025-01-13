@@ -7,9 +7,6 @@ from pathlib import Path
 arch = subprocess.check_output(["uname", "-m"], encoding='utf8').rstrip()
 if platform.system() == "Darwin":
   arch = "Darwin"
-  tools = ["default", "cython"]
-else:
-  tools = ['g++', 'gnulink', 'cython']
 
 pwd = str(Path(sysconfig.get_paths()['data']).parent)
 os.environ['PYTHONPATH'] = pwd
@@ -59,7 +56,7 @@ env = Environment(
   CXXFLAGS=["-std=c++1z"],
   CPPPATH=cpppath,
   CYTHONCFILESUFFIX=".cpp",
-  tools=tools,
+  tools=["default", "cython"] if arch == "Darwin" else ['g++', 'gnulink', 'cython'],
 )
 
 common = ''
