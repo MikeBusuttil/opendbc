@@ -2,7 +2,6 @@ import os
 import subprocess
 import sysconfig
 import platform
-import numpy as np
 from pathlib import Path
 
 arch = subprocess.check_output(["uname", "-m"], encoding='utf8').rstrip()
