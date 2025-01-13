@@ -10,7 +10,7 @@
 #include <iterator>
 #include <cstring>
 #include <clocale>
-#include <iostream>
+
 #include "opendbc/can/common.h"
 #include "opendbc/can/common_dbc.h"
 
