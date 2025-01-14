@@ -21,6 +21,7 @@ g++ -o .tmp/re2.o .tmp/re2.c -lre2 &>/dev/null || {
   [[ $OSTYPE = "linux-gnu" ]] && sudo apt-get install -y --no-install-recommends libre2-dev || brew install re2
 }
 rm -rf .tmp
+rm -f .np_include
 
 # *** build ***
 uv run scons -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)

@@ -2,14 +2,14 @@ import os
 import subprocess
 import sysconfig
 import platform
-import numpy as np
 from pathlib import Path
 
 arch = subprocess.check_output(["uname", "-m"], encoding='utf8').rstrip()
 if platform.system() == "Darwin":
   arch = "Darwin"
 
-os.environ['PYTHONPATH'] = str(Path(sysconfig.get_paths()['data']).parent)
+pwd = str(Path(sysconfig.get_paths()['data']).parent)
+os.environ['PYTHONPATH'] = pwd
 python_path = sysconfig.get_paths()['include']
 cpppath = [
   '#',
@@ -63,7 +63,14 @@ common = ''
 Export('env', 'arch', 'common')
 
 envCython = env.Clone()
-envCython["CPPPATH"] += [np.get_include()]
+
+try:
+  np_path = Path(f"{pwd}/.np_include").read_text()
+except FileNotFoundError:
+  import numpy as np
+  np_path = np.get_include()
+  Path(f"{pwd}/.np_include").write_text(np_path)
+envCython["CPPPATH"] += [np_path]
 envCython["CCFLAGS"] += ["-Wno-#warnings", "-Wno-shadow", "-Wno-deprecated-declarations"]
 envCython["CCFLAGS"].remove("-Werror")
 
