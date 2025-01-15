@@ -11,13 +11,14 @@ if arch == "Darwin":
   LINKFLAGS += ["-Wl,-install_name,@loader_path/libdbc.dylib,/opt/homebrew/lib/libre2.dylib"]
 libdbc = envDBC.SharedLibrary('libdbc', src, LIBS=[common, ], LINKFLAGS=LINKFLAGS)
 
-# Build packer and parser
+# Build packer, parser, and CANDefine
 lenv = envCython.Clone()
 lenv["LIBPATH"].append(Dir("."))
 lenv["RPATH"] = [libdbc[0].dir.abspath, ]
 parser = lenv.Program('parser_pyx.so', 'parser_pyx.pyx', LIBS=[common, libdbc[0].name, 're2'])
 packer = lenv.Program('packer_pyx.so', 'packer_pyx.pyx', LIBS=[common, libdbc[0].name])
+can_define = lenv.Program('can_define_pyx.so', 'can_define_pyx.pyx', LIBS=[common, libdbc[0].name])
 
-opendbc_python = Alias("opendbc_python", [parser, packer])
+opendbc_python = Alias("opendbc_python", [parser, packer, can_define])
 
 Export('opendbc_python')
