@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
-#include <re2/re2.h>
+#include <ctre.hpp>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -14,10 +14,14 @@
 #include "opendbc/can/common.h"
 #include "opendbc/can/common_dbc.h"
 
-RE2 bo_regexp(R"(^BO_ (\w+) (\w+) *: (\w+) (\w+))");
-RE2 sg_regexp(R"(^SG_ (\w+) .*: (\d+)\|(\d+)@(\d+)([\+|\-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\) \[([0-9.+\-eE]+)\|([0-9.+\-eE]+)\] \"(.*)\" (.*))");
-RE2 val_regexp(R"(VAL_ (\w+) (\w+) (.*))");
-RE2 val_split_regexp(R"((([0-9]) \"(.+?)\"))");
+constexpr auto bo_pattern = ctll::fixed_string{R"(^BO_ (\w+) (\w+) *: (\w+) \w+)"};
+constexpr auto sg_pattern = ctll::fixed_string{R"(^SG_ (\w+) .*: (\d+)\|(\d+)@(\d+)([\+|\-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\) \[[0-9.+\-eE]+\|[0-9.+\-eE]+\] \".*\" .*)"};
+constexpr auto val_pattern = ctll::fixed_string{R"(VAL_ (\w+) (\w+) (.*))"};
+constexpr auto val_split_pattern = ctll::fixed_string{R"( ?(?:(\d+) \"([^"]++)\"))"};
+constexpr auto bo_match = ctre::match<bo_pattern>;
+constexpr auto sg_match = ctre::match<sg_pattern>;
+constexpr auto val_match = ctre::match<val_pattern>;
+constexpr auto val_tokenize = ctre::tokenize<val_split_pattern>;
 
 #define DBC_ASSERT(condition, message)                             \
   do {                                                             \
@@ -120,19 +124,18 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
 
   std::string line;
   int line_num = 0;
-  std::string match1, match2, match3, match4, match5, match6, match7;
   while (std::getline(stream, line)) {
     line = trim(line);
     line_num += 1;
     if (startswith(line, "BO_ ")) {
       // new group
-      bool ret = RE2::FullMatch(line, bo_regexp, &match1, &match2, &match3);
+      auto [ret, match1, match2, match3] = bo_match(line);
       DBC_ASSERT(ret, "bad BO: " << line);
 
       Msg& msg = dbc->msgs.emplace_back();
-      address = msg.address = std::stoul(match1);  // could be hex
-      msg.name = match2;
-      msg.size = std::stoul(match3);
+      address = msg.address = std::stoul(match1.str());  // could be hex
+      msg.name = match2.str();
+      msg.size = std::stoul(match3.str());
 
       // check for duplicates
       DBC_ASSERT(address_set.find(address) == address_set.end(), "Duplicate message address: " << address << " (" << msg.name << ")");
@@ -144,16 +147,16 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
       }
     } else if (startswith(line, "SG_ ")) {
       // new signal
-      bool ret = RE2::FullMatch(line, sg_regexp, &match1, &match2, &match3, &match4, &match5, &match6, &match7);
+      auto [ret, match1, match2, match3, match4, match5, match6, match7] = sg_match(line);
       DBC_ASSERT(ret, "bad SG: " << line);
       Signal& sig = signals[address].emplace_back();
-      sig.name = match1;
-      sig.start_bit = std::stoi(match2);
-      sig.size = std::stoi(match3);
-      sig.is_little_endian = std::stoi(match4) == 1;
-      sig.is_signed = match5 == "-";
-      sig.factor = std::stod(match6);
-      sig.offset = std::stod(match7);
+      sig.name = match1.str();
+      sig.start_bit = std::stoi(match2.str());
+      sig.size = std::stoi(match3.str());
+      sig.is_little_endian = std::stoi(match4.str()) == 1;
+      sig.is_signed = match5.str() == "-";
+      sig.factor = std::stod(match6.str());
+      sig.offset = std::stod(match7.str());
       set_signal_type(sig, checksum, dbc_name, line_num);
       if (sig.is_little_endian) {
         sig.lsb = sig.start_bit;
@@ -170,23 +173,22 @@ DBC* dbc_parse_from_stream(const std::string &dbc_name, std::istream &stream, Ch
       signal_name_sets[address].insert(sig.name);
     } else if (startswith(line, "VAL_ ")) {
       // new signal value/definition
-      bool ret = RE2::FullMatch(line, val_regexp, &match1, &match2, &match3);
+      auto [ret, match1, match2, match3] = val_match(line);
       DBC_ASSERT(ret, "bad VAL: " << line);
 
       auto& val = dbc->vals.emplace_back();
-      val.address = std::stoul(match1);  // could be hex
-      val.name = match2;
+      val.address = std::stoul(match1.str());  // could be hex
+      val.name = match2.str();
 
-      auto defvals = match3;
+      auto defvals = match3.str();
       // convert strings to UPPER_CASE_WITH_UNDERSCORES
       std::vector<std::string> words;
-      std::string full_match, number, word;
-      while (RE2::PartialMatch(defvals, val_split_regexp, &full_match, &number, &word)) {
+      for (auto match : val_tokenize(defvals)) {
+        std::string word = match.get<2>().str();
         word = trim(word);
         std::transform(word.begin(), word.end(), word.begin(), ::toupper);
         std::replace(word.begin(), word.end(), ' ', '_');
-        words.push_back(number + " " + word);
-        defvals = defvals.substr(full_match.length(), defvals.length() - full_match.length());
+        words.push_back(match.get<1>().str() + " " + word);
       }
       // join string
       std::stringstream s;
